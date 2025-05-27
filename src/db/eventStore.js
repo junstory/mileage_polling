@@ -40,7 +40,7 @@ async function setLastProcessedBlock(blockNumber, contractAddress = null) {
 // 중복 체크
 async function isDuplicateInDB(txHash, logIndex) {
   const found = await eventLog.findOne({
-    where: { tx_hash: txHash, log_index: logIndex },
+    where: { tx_hash: txHash, log_index: logIndex, status:1 },
     attributes: ["id"],
   });
   return !!found;

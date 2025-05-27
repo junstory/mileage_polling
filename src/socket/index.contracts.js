@@ -254,6 +254,12 @@ setInterval(async () => {
           // logs status=1(확정)로 저장
           // 감지된 이벤트는 일단 모두 로그를 남긴다.
           // TODO: contract도 주소도 남기도록 수정. token 주소가 바뀔 수 있으므로
+          // 비즈니스 테이블 등 확정 처리
+          if (handlers[eventName]) {
+            if (await isDuplicateInDB(txHash, logIndex)) continue; // 중복 이벤트는 무시
+            console.log("in...확정 블록 핸들러:", parsed.args, log);
+            await handlers[eventName](parsed.args, log);
+          }
           await insertOrUpdateEvent({
             txHash,
             logIndex,
@@ -262,11 +268,7 @@ setInterval(async () => {
             data: parsed.args,
             status: 1,
           });
-          // 비즈니스 테이블 등 확정 처리
-          if (handlers[eventName]) {
-            console.log("in...확정 블록 핸들러:", parsed.args, log);
-            await handlers[eventName](parsed.args, log);
-          }
+          
         } catch (e) {
           /*파싱불가 로그 무시*/
         }
@@ -281,7 +283,11 @@ setInterval(async () => {
     (e) => e.blockNumber <= confirmBlock
   );
   for (const evt of toConfirm) {
-    //if (await isDuplicateInDB(evt.txHash, evt.logIndex)) continue;
+    if (await isDuplicateInDB(evt.txHash, evt.logIndex)) continue;
+    if (handlers[evt.eventName]) {
+      console.log("확정 블록 핸들러:", evt.args, evt.log);
+      await handlers[evt.eventName](evt.args, evt.log);
+    }
     await insertOrUpdateEvent({
       txHash: evt.txHash,
       logIndex: evt.logIndex,
@@ -290,10 +296,7 @@ setInterval(async () => {
       data: evt.args,
       status: 1,
     });
-    if (handlers[evt.eventName]) {
-      console.log("확정 블록 핸들러:", evt.args, evt.log);
-      await handlers[evt.eventName](evt.args, evt.log);
-    }
+    
   }
   pendingEvents.length = 0;
   pendingEvents.push(...stillPending);
