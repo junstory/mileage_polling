@@ -25,7 +25,7 @@ const eventLog = require('./eventLog.model')(sequelize, Sequelize.DataTypes);
 const swMileage = require('./swMileage.model')(sequelize, Sequelize.DataTypes);
 const student = require('./student.model')(sequelize, Sequelize.DataTypes);
 const admin = require('./admin.model')(sequelize, Sequelize.DataTypes);
-
+const swMileageToken = require('./swMileageToken.model')(sequelize, Sequelize.DataTypes);
 
 module.exports = {
     sequelize,
@@ -34,4 +34,5 @@ module.exports = {
     swMileage,
     student,
     admin,
+    swMileageToken
 }

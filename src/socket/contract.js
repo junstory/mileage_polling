@@ -1,5 +1,6 @@
 const STUDENT_MANAGER_CONTRACT_ADDRESS_ABI = require('../utils/data/contract/StudentManager.abi.json');
 const SW_MILEAGE_CONTRACT_ADDRESS_ABI = require('../utils/data/contract/SwMileageToken.abi.json');
+const SW_MILEAGE_FACTORY_CONTRACT_ADDRESS_ABI = require('../utils/data/contract/SwMileageTokenFactory.abi.json');
 
 const STUDENT_MANAGER_CONTRACT_ADDRESS_EVENT = [
     "DocSubmitted",             //제출
@@ -42,9 +43,14 @@ module.exports = [
     events: STUDENT_MANAGER_CONTRACT_ADDRESS_EVENT,
   },
   {
-    address: process.env.SW_MILEAGE_CONTRACT_ADDRESS,
+    address: null, // null로 설정하여 나중에 동적으로 할당
     abi: SW_MILEAGE_CONTRACT_ADDRESS_ABI,
     events: SW_MILEAGE_CONTRACT_ADDRESS_EVENT,
+  },
+  {
+    address: process.env.SW_MILEAGE_FACTORY_CONTRACT_ADDRESS,
+    abi: SW_MILEAGE_FACTORY_CONTRACT_ADDRESS_ABI,
+    events: ["MileageTokenCreated"],
   },
   // ...필요한 만큼
 ];

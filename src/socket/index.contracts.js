@@ -1,10 +1,17 @@
-const { ethers } = require('ethers');
+const { ethers } = require("ethers");
 
-const config = { ETH_NODE_WSS: 'wss://public-en-kairos.node.kaia.io/ws' };
+const config = { ETH_NODE_WSS: "wss://public-en-kairos.node.kaia.io/ws" };
 const logger = console;
-const {setLastProcessedBlock, getLastProcessedBlock, insertOrUpdateEvent, isDuplicateInDB, updateEventStatus } = require('../db/eventStore');
-const handlers = require('./eventHandler');
-const contracts = require('./contract');
+const {
+  setLastProcessedBlock,
+  getLastProcessedBlock,
+  insertOrUpdateEvent,
+  isDuplicateInDB,
+  updateEventStatus,
+} = require("../db/eventStore");
+const { getLatestSwMileageTokenAddress } = require("../db/swMileageToken");
+const handlers = require("./eventHandler");
+const contracts = require("./contract");
 
 const EXPECTED_PONG_BACK = 15000; // Time to wait for a pong response in milliseconds
 const KEEP_ALIVE_CHECK_INTERVAL = 7500; // Interval for sending ping messages in milliseconds
@@ -17,20 +24,66 @@ const pendingEvents = [];
 let latestBlock = 0;
 
 let provider = new ethers.WebSocketProvider(config.ETH_NODE_WSS);
-function startSocketConnection() {
-    provider = new ethers.WebSocketProvider(config.ETH_NODE_WSS);
 
-    contracts.forEach(contractMeta => {
-    const contract = new ethers.Contract(contractMeta.address, contractMeta.abi, provider);
-    contractMeta.events.forEach(eventName => {
-        contract.on(eventName, async (...args) => {
-        const event = args[args.length-1]; // 마지막은 event 객체
+let currentSwTokenContract = null;
+global.onNewMileageTokenCreated = async function(tokenAddress) {
+    // 이전 구독 해제
+    if (currentSwTokenContract) {
+        currentSwTokenContract.removeAllListeners();
+        console.log(`[SWToken] 이전 구독 해제: ${currentSwTokenContract.address}`);
+    }
+
+    // 새 토큰 컨트랙트 구독 등록
+    const abi = require('../utils/data/contract/SwMileageToken.abi.json');
+    currentSwTokenContract = new ethers.Contract(tokenAddress, abi, provider);
+    
+    const swTokenEvents = contracts[1].events;
+
+    swTokenEvents.forEach(eventName => {
+        currentSwTokenContract.on(eventName, async (...args) => {
+            const eventObj = args[args.length - 1];
+            if (handlers[eventName]) {
+                await handlers[eventName](args, eventObj);
+            }
+            console.log(`[SWToken][${eventName}] 이벤트 감지:`, eventObj);
+        });
+    });
+
+    // contracts 배열 최신화(옵션)
+    const idx = contracts.findIndex(c => c.key === "swMileageToken");
+    if (idx > -1) contracts[idx].address = tokenAddress;
+
+    console.log(`[SWToken] 새로운 토큰 컨트랙트 구독 시작: ${tokenAddress}`);
+};
+
+
+async function startSocketConnection() {
+  provider = new ethers.WebSocketProvider(config.ETH_NODE_WSS);
+
+  const latestSwMileageTokenAddress = await getLatestSwMileageTokenAddress();
+  const idx = 1
+  
+  if (idx > -1) contracts[idx].address = latestSwMileageTokenAddress;
+  contracts.forEach((contractMeta) => {
+    // 주소없는 컨트랙트는 패스
+    if (!contractMeta.address) return;
+    const contract = new ethers.Contract(
+      contractMeta.address,
+      contractMeta.abi,
+      provider
+    );
+    contractMeta.events.forEach((eventName) => {
+      contract.on(eventName, async (...args) => {
+        const event = args[args.length - 1]; // 마지막은 event 객체
         const log = event.log || event;
         const txHash = log.transactionHash;
         const blockNumber = log.blockNumber;
         const logIndex = log.index;
         const removed = log.removed;
-        console.log("🔔 RewardIssued:", { txHash: event.transactionHash, ...args });
+        console.log("🔔 RewardIssued:", {
+          txHash: event.transactionHash,
+          ...args,
+        });
         console.log("txHash:", txHash);
         console.log("logIndex:", logIndex);
         // TODO: DB 반영 및 리오그 처리
@@ -55,23 +108,33 @@ function startSocketConnection() {
         // }
 
         // 진행중 이벤트 logs 기록 (pending)
+        // 감지되는 이벤트는 일단 모두 로그를 남긴다. (이때는 미확정 pending상태 -> status:2)
+        // TODO: contract도 주소도 남기도록 수정. token 주소가 바뀔 수 있으므로
         await insertOrUpdateEvent({
-            txHash, logIndex, eventName, blockNumber,
-            data: args.slice(0, -1), status: 2
+          txHash,
+          logIndex,
+          eventName,
+          blockNumber,
+          data: args.slice(0, -1),
+          status: 2,
         });
 
         // 중복 없이 pendingEvents에 추가
-        if (!pendingEvents.some(e => e.txHash === txHash && e.logIndex === logIndex)) {
-            pendingEvents.push({
-                eventName,
-                args: args.slice(0, -1),
-                log,
-                txHash,
-                blockNumber,
-                logIndex
-            });
+        if (
+          !pendingEvents.some(
+            (e) => e.txHash === txHash && e.logIndex === logIndex
+          )
+        ) {
+          pendingEvents.push({
+            eventName,
+            args: args.slice(0, -1),
+            log,
+            txHash,
+            blockNumber,
+            logIndex,
+          });
         }
-    });
+      });
       //original
       // contract.on(eventName, async (...args) => {
       //   const event = args[args.length-1]; // 마지막은 event 객체
@@ -91,135 +154,149 @@ function startSocketConnection() {
     //   } catch (e) { /* log parse error 무시 */ }
     // });
   });
- 
 
-    let pingTimeout = null;
-    let keepAliveInterval = null;
+  let pingTimeout = null;
+  let keepAliveInterval = null;
 
-    function scheduleReconnection() {
-        if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-            let delay = RECONNECT_INTERVAL_BASE * Math.pow(2, reconnectAttempts);
-            setTimeout(startSocketConnection, delay);
-            reconnectAttempts++;
-            logger.log(`Scheduled reconnection attempt ${reconnectAttempts} in ${delay} ms`);
-        } else {
-            logger.error('Maximum reconnection attempts reached. Aborting.');
-        }
+  function scheduleReconnection() {
+    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+      let delay = RECONNECT_INTERVAL_BASE * Math.pow(2, reconnectAttempts);
+      setTimeout(startSocketConnection, delay);
+      reconnectAttempts++;
+      logger.log(
+        `Scheduled reconnection attempt ${reconnectAttempts} in ${delay} ms`
+      );
+    } else {
+      logger.error("Maximum reconnection attempts reached. Aborting.");
     }
+  }
 
-    // Event listener for 'open' event on WebSocket connection
-    provider.websocket.on('open', () => {
-        reconnectAttempts = 0;
-        keepAliveInterval = setInterval(() => {
-            logger.debug('Checking if the connection is alive, sending a ping');
-            provider.websocket.ping();
+  //=====================
+  // 재연결 및 에러 처리
+  // =====================
+  
+  provider.websocket.on("open", () => {
+    reconnectAttempts = 0;
+    keepAliveInterval = setInterval(() => {
+      logger.debug("Checking if the connection is alive, sending a ping");
+      provider.websocket.ping();
 
-            pingTimeout = setTimeout(() => {
-                logger.error('No pong received, terminating WebSocket connection');
-                provider.websocket.terminate();
-            }, EXPECTED_PONG_BACK);
-        }, KEEP_ALIVE_CHECK_INTERVAL);
-    });
+      pingTimeout = setTimeout(() => {
+        logger.error("No pong received, terminating WebSocket connection");
+        provider.websocket.terminate();
+      }, EXPECTED_PONG_BACK);
+    }, KEEP_ALIVE_CHECK_INTERVAL);
+  });
 
-    // Event listener for 'close' event on WebSocket connection
-    provider.websocket.on('close', () => {
-        logger.error('The websocket connection was closed');
-        clearInterval(keepAliveInterval);
-        clearTimeout(pingTimeout);
-        scheduleReconnection();
-    });
+  provider.websocket.on("close", () => {
+    logger.error("The websocket connection was closed");
+    clearInterval(keepAliveInterval);
+    clearTimeout(pingTimeout);
+    scheduleReconnection();
+  });
 
-    // Event listener for 'pong' response to ping
-    provider.websocket.on('pong', () => {
-        logger.debug('Received pong, connection is alive');
-        clearTimeout(pingTimeout);
-    });
+  provider.websocket.on("pong", () => {
+    logger.debug("Received pong, connection is alive");
+    clearTimeout(pingTimeout);
+  });
 
-    // Event listener for new blocks on the Ethereum blockchain
-    provider.on('block', (blockNumber) => {
-        logger.log(`New Block: ${blockNumber}`);
-        latestBlock = blockNumber;
-    });
+  provider.on("block", (blockNumber) => {
+    logger.log(`New Block: ${blockNumber}`);
+    latestBlock = blockNumber;
+  });
 
-    // Event listener for errors on WebSocket connection
-    provider.on('error', (error) => {
-        logger.error('WebSocket error:', error);
-        scheduleReconnection();
-    });
-
+  provider.on("error", (error) => {
+    logger.error("WebSocket error:", error);
+    scheduleReconnection();
+  });
 }
 
 //====================
-// 폴링서버 
+// 폴링서버
 //====================
 // 폴링: 확정 블록만 반영
 
 function partition(arr, predicate) {
-    const yes = [], no = [];
-    arr.forEach(item => (predicate(item) ? yes : no.push(item)));
-    return [yes, no];
+  const yes = [],
+    no = [];
+  arr.forEach((item) => (predicate(item) ? yes : no.push(item)));
+  return [yes, no];
 }
 
 setInterval(async () => {
-    const confirmBlock = latestBlock - 3;
-    let lastBlock = await getLastProcessedBlock();
-    console.log("확정 블록 확인", { confirmBlock, lastBlock});
-    for (let b = lastBlock + 1; b <= confirmBlock; b++) {
-        for (const contractMeta of contracts) {
-            const logs = await provider.getLogs({
-                fromBlock: b,
-                toBlock: b,
-                address: contractMeta.address
-            });
-            const iface = new ethers.Interface(contractMeta.abi);
-            for (const log of logs) {
-                try {
-                    console.log("확정 블록 로그:", log);
-                    const parsed = iface.parseLog(log);
-                    const eventName = parsed.name;
-                    const txHash = log.transactionHash;
-                    const logIndex = log.index;
+  const contractAddress = await getLatestSwMileageTokenAddress();
+  if (!contractAddress) {
+    console.log("[경고] SW 마일리지 토큰이 DB에 등록되어 있지 않습니다.");
+    throw new Error("SW 마일리지 토큰이 등록되지 않았습니다.");
+  }
+  const confirmBlock = latestBlock - 3;
+  let lastBlock = await getLastProcessedBlock(contractAddress);
+  console.log("확정 블록 확인", { confirmBlock, lastBlock });
+  console.log("현재 토큰 컨트랙트,", contracts[1].address, contractAddress);
+  for (let b = lastBlock + 1; b <= confirmBlock; b++) {
+    for (const contractMeta of contracts) {
+      const logs = await provider.getLogs({
+        fromBlock: b,
+        toBlock: b,
+        address: contractMeta.address,
+      });
+      const iface = new ethers.Interface(contractMeta.abi);
+      for (const log of logs) {
+        try {
+          //console.log("확정 블록 로그:", log);
+          const parsed = iface.parseLog(log);
+          const eventName = parsed.name;
+          const txHash = log.transactionHash;
+          const logIndex = log.index;
 
-                    // 중복/실패 확인
-                    //if (await isDuplicateInDB(txHash, logIndex)) continue;
-                    // logs status=1(확정)로 저장
-                    await insertOrUpdateEvent({
-                        txHash, logIndex, eventName, blockNumber: log.blockNumber,
-                        data: parsed.args, status: 1
-                    });
-                    // 비즈니스 테이블 등 확정 처리
-                    if (handlers[eventName]) {
-                        console.log("in...확정 블록 핸들러:", parsed.args, log);
-                        await handlers[eventName](parsed.args, log);
-                    }
-                } catch (e) {/*파싱불가 로그 무시*/}
-            }
+          // 중복/실패 확인
+          //if (await isDuplicateInDB(txHash, logIndex)) continue;
+          // logs status=1(확정)로 저장
+          // 감지된 이벤트는 일단 모두 로그를 남긴다.
+          // TODO: contract도 주소도 남기도록 수정. token 주소가 바뀔 수 있으므로
+          await insertOrUpdateEvent({
+            txHash,
+            logIndex,
+            eventName,
+            blockNumber: log.blockNumber,
+            data: parsed.args,
+            status: 1,
+          });
+          // 비즈니스 테이블 등 확정 처리
+          if (handlers[eventName]) {
+            console.log("in...확정 블록 핸들러:", parsed.args, log);
+            await handlers[eventName](parsed.args, log);
+          }
+        } catch (e) {
+          /*파싱불가 로그 무시*/
         }
-        await setLastProcessedBlock(b);
+      }
     }
+    await setLastProcessedBlock(b, contractAddress);
+  }
 
-    // pendingEvents 중 확정된 블록만 반영
-    const [toConfirm, stillPending] = partition(
-        pendingEvents,
-        e => e.blockNumber <= confirmBlock
-    );
-    for (const evt of toConfirm) {
-        //if (await isDuplicateInDB(evt.txHash, evt.logIndex)) continue;
-        await insertOrUpdateEvent({
-            txHash: evt.txHash,
-            logIndex: evt.logIndex,
-            eventName: evt.eventName,
-            blockNumber: evt.blockNumber,
-            data: evt.args,
-            status: 1
-        });
-        if (handlers[evt.eventName]) {
-            console.log("확정 블록 핸들러:", evt.args, evt.log);
-            await handlers[evt.eventName](evt.args, evt.log);
-        }
+  // pendingEvents 중 확정된 블록만 반영
+  const [toConfirm, stillPending] = partition(
+    pendingEvents,
+    (e) => e.blockNumber <= confirmBlock
+  );
+  for (const evt of toConfirm) {
+    //if (await isDuplicateInDB(evt.txHash, evt.logIndex)) continue;
+    await insertOrUpdateEvent({
+      txHash: evt.txHash,
+      logIndex: evt.logIndex,
+      eventName: evt.eventName,
+      blockNumber: evt.blockNumber,
+      data: evt.args,
+      status: 1,
+    });
+    if (handlers[evt.eventName]) {
+      console.log("확정 블록 핸들러:", evt.args, evt.log);
+      await handlers[evt.eventName](evt.args, evt.log);
     }
-    pendingEvents.length = 0;
-    pendingEvents.push(...stillPending);
+  }
+  pendingEvents.length = 0;
+  pendingEvents.push(...stillPending);
 }, 3000); // 3초마다
 // Initiate the connection
 //startConnection();
