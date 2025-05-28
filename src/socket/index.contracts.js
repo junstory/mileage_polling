@@ -5,6 +5,8 @@ const logger = console;
 const {
   setLastProcessedBlock,
   getLastProcessedBlock,
+  setLastProcessedBlockLegacy,
+  getLastProcessedBlockLegacy,
   insertOrUpdateEvent,
   isDuplicateInDB,
   updateEventStatus,
@@ -25,45 +27,9 @@ let latestBlock = 0;
 
 let provider = new ethers.WebSocketProvider(config.ETH_NODE_WSS);
 
-let currentSwTokenContract = null;
-global.onNewMileageTokenCreated = async function(tokenAddress) {
-    // 이전 구독 해제
-    if (currentSwTokenContract) {
-        currentSwTokenContract.removeAllListeners();
-        console.log(`[SWToken] 이전 구독 해제: ${currentSwTokenContract.address}`);
-    }
-
-    // 새 토큰 컨트랙트 구독 등록
-    const abi = require('../utils/data/contract/SwMileageToken.abi.json');
-    currentSwTokenContract = new ethers.Contract(tokenAddress, abi, provider);
-    
-    const swTokenEvents = contracts[1].events;
-
-    swTokenEvents.forEach(eventName => {
-        currentSwTokenContract.on(eventName, async (...args) => {
-            const eventObj = args[args.length - 1];
-            if (handlers[eventName]) {
-                await handlers[eventName](args, eventObj);
-            }
-            console.log(`[SWToken][${eventName}] 이벤트 감지:`, eventObj);
-        });
-    });
-
-    // contracts 배열 최신화(옵션)
-    const idx = contracts.findIndex(c => c.key === "swMileageToken");
-    if (idx > -1) contracts[idx].address = tokenAddress;
-
-    console.log(`[SWToken] 새로운 토큰 컨트랙트 구독 시작: ${tokenAddress}`);
-};
-
-
 async function startSocketConnection() {
   provider = new ethers.WebSocketProvider(config.ETH_NODE_WSS);
 
-  const latestSwMileageTokenAddress = await getLatestSwMileageTokenAddress();
-  const idx = 1
-  
-  if (idx > -1) contracts[idx].address = latestSwMileageTokenAddress;
   contracts.forEach((contractMeta) => {
     // 주소없는 컨트랙트는 패스
     if (!contractMeta.address) return;
@@ -230,9 +196,8 @@ setInterval(async () => {
     throw new Error("SW 마일리지 토큰이 등록되지 않았습니다.");
   }
   const confirmBlock = latestBlock - 3;
-  let lastBlock = await getLastProcessedBlock(contractAddress);
+  let lastBlock = await getLastProcessedBlockLegacy();
   console.log("확정 블록 확인", { confirmBlock, lastBlock });
-  console.log("현재 토큰 컨트랙트,", contracts[1].address, contractAddress);
   for (let b = lastBlock + 1; b <= confirmBlock; b++) {
     for (const contractMeta of contracts) {
       const logs = await provider.getLogs({
@@ -257,7 +222,7 @@ setInterval(async () => {
           // 비즈니스 테이블 등 확정 처리
           if (handlers[eventName]) {
             if (await isDuplicateInDB(txHash, logIndex)) continue; // 중복 이벤트는 무시
-            console.log("in...확정 블록 핸들러:", parsed.args, log);
+            console.log("in...확정 블록 핸들러:", eventName, parsed.args, log);
             await handlers[eventName](parsed.args, log);
           }
           await insertOrUpdateEvent({
@@ -274,7 +239,7 @@ setInterval(async () => {
         }
       }
     }
-    await setLastProcessedBlock(b, contractAddress);
+    await setLastProcessedBlockLegacy(b);
   }
 
   // pendingEvents 중 확정된 블록만 반영

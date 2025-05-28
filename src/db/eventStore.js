@@ -82,4 +82,7 @@ module.exports = {
   isDuplicateInDB,
   insertOrUpdateEvent,
   updateEventStatus,
+  setLastProcessedBlockLegacy,
+  getLastProcessedBlockLegacy
+
 };
