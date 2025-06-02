@@ -1,19 +1,19 @@
 const {student} =  require('../models');
 
 // 상태 업데이트
-async function updateStudentStatus(account, is_activate, txHash) {
+async function confirmStudent(studentHash) {
   try {
     await student.update(
-      { is_activate: is_activate },
-      { where: { transaction_hash: txHash, wallet_address: account } }
+      { is_confirmed: 1 },
+      { where: { student_hash: studentHash } }
     );
-    console.log('updateStudentStatus 성공:', txHash);
+    console.log('confirmStudent 성공:', studentHash);
   } catch (err) {
-    console.error('updateStudentStatus 에러:', err);
+    console.error('confirmStudent 에러:', err);
     throw err;  // 에러를 호출한 쪽으로 던짐
   }
 }
 
 module.exports = {
-    updateStudentStatus,
+    confirmStudent,
 };
