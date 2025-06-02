@@ -21,9 +21,9 @@ module.exports = (sequelize, DataTypes) => {
     data:       { 
         type: DataTypes.JSON 
     },
-    status:     { 
+    is_confirmed:     { 
         type: DataTypes.TINYINT, 
-        defaultValue: 2 
+        defaultValue: 0 
     },
   }, 
   

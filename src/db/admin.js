@@ -1,11 +1,11 @@
 const {admin} =  require('../models');
 
 // 상태 업데이트
-async function addAdminStatus(account, is_activate, txHash) {
+async function addAdminStatus(account, is_confirmed, txHash) {
   try {
     await admin.update(
-      { is_activate: is_activate },
-      { where: { transaction_hash: txHash, wallet_address: account } }
+      { is_confirmed: is_confirmed },
+      { where: { wallet_address: account } }
     );
     console.log('addAdminStatus 성공:', txHash);
   } catch (err) {
@@ -14,10 +14,11 @@ async function addAdminStatus(account, is_activate, txHash) {
   }
 }
 
-async function removeAdminStatus(account, is_activate, txHash) {
+// 현재 사용하지 않음. 어드민 삭제는 고려하지 않은 상태.
+async function removeAdminStatus(account, is_confirmed, txHash) {
   try {
     await admin.update(
-      { is_activate: is_activate },
+      { is_confirmed: is_confirmed },
       { where: { transaction_hash: txHash, wallet_address: account } }
     );
     console.log('removeAdminStatus 성공:', txHash);

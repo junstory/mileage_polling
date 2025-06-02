@@ -3,21 +3,22 @@ const SW_MILEAGE_CONTRACT_ADDRESS_ABI = require('../utils/data/contract/SwMileag
 const SW_MILEAGE_FACTORY_CONTRACT_ADDRESS_ABI = require('../utils/data/contract/SwMileageTokenFactory.abi.json');
 
 const STUDENT_MANAGER_CONTRACT_ADDRESS_EVENT = [
-    "DocSubmitted",             //제출
-    "DocApproved",              //승인  
-    "DocRejected",              //거절
-    "AccountChangeProposed",    //계정 변경 요청
-    "AccountChangeConfirmed",   //계정 변경 승인
     "AccountChanged",           //계정 변경 완료
-    "AdminAdded",               //관리자 추가 
-    "AdminRemoved",             //관리자 제거
+    "DocApproved",              //승인            studentId, docHash로 구분 
     "MileageBurned",            //마일리지 소모
-    "StudentRecordUpdated",     //학생 기록 업데이트(계정)
+    "MileageMinted",            //마일리지 발행
+    "DocSubmitted",             //제출            studentId, docHash로 구분
+    "DocRejected",              //거절            studentId, docHash로 구분
+    "AdminAdded",               //관리자 추가 
     "StudentRegistered",        //학생 등록
-    "transferMileageToken",     //마일리지 토큰 전송
-    "Initialized",
-    "Paused",
-    "Unpaused",
+    // "AccountChangeProposed",    //계정 변경 요청
+    // "AccountChangeConfirmed",   //계정 변경 승인
+    //"AdminRemoved",             //관리자 제거
+    //"StudentRecordUpdated",     //학생 기록 업데이트(계정)
+    // "transferMileageToken",     //마일리지 토큰 전송
+    // "Initialized",
+    // "Paused",
+    // "Unpaused",
 ];
 
 const abiEvents = STUDENT_MANAGER_CONTRACT_ADDRESS_ABI.filter(item => item.type === "event").map(item => item.name);

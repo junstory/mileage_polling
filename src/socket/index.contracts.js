@@ -82,7 +82,7 @@ async function startSocketConnection() {
           eventName,
           blockNumber,
           data: args.slice(0, -1),
-          status: 2,
+          isConfirmed: 2,
         });
 
         // 중복 없이 pendingEvents에 추가
@@ -231,7 +231,7 @@ setInterval(async () => {
             eventName,
             blockNumber: log.blockNumber,
             data: parsed.args,
-            status: 1,
+            isConfirmed: 1,
           });
           
         } catch (e) {

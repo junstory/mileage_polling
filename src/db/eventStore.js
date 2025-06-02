@@ -40,7 +40,7 @@ async function setLastProcessedBlock(blockNumber, contractAddress = null) {
 // 중복 체크
 async function isDuplicateInDB(txHash, logIndex) {
   const found = await eventLog.findOne({
-    where: { tx_hash: txHash, log_index: logIndex, status:1 },
+    where: { tx_hash: txHash, log_index: logIndex, is_confirmed:1 },
     attributes: ["id"],
   });
   return !!found;
@@ -53,7 +53,7 @@ async function insertOrUpdateEvent({
   eventName,
   blockNumber,
   data,
-  status,
+  isConfirmed,
 }) {
   const safeData = JSON.stringify(data, (key, value) =>
     typeof value === "bigint" ? value.toString() : value
@@ -64,14 +64,14 @@ async function insertOrUpdateEvent({
     event_name: eventName,
     block_number: blockNumber,
     data: safeData,
-    status: status,
+    is_confirmed: isConfirmed,
   });
 }
 
 // 상태 업데이트
 async function updateEventStatus(txHash, logIndex, status) {
   await eventLog.update(
-    { status },
+    { is_confirmed:status },
     { where: { tx_hash: txHash, log_index: logIndex } }
   );
 }
