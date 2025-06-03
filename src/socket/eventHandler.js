@@ -1,11 +1,7 @@
 const { bytes32ToStr } = require("../utils/web3");
 const { confirmStudent, getStudentByStudentHash } = require("../db/student");
 const { confirmAdmin } = require("../db/admin");
-const {
-  confirmDoc,
-  approveDoc,
-  rejectDoc,
-} = require("../db/swMileage");
+const { confirmDoc, approveDoc, rejectDoc } = require("../db/swMileage");
 const { createTokenHistory } = require("../db/swMileageTokenHistory");
 const { getActiveTokenInfo } = require("../db/swMileageToken");
 
@@ -65,7 +61,7 @@ const handlers = {
 
       // student_id, doc_index로 sw_mileage 특정 후 상태값 변경
       await approveDoc(studentId, documentIndex);
-      
+
       // history 생성
       const activeToken = await getActiveTokenInfo();
       await createTokenHistory({
@@ -95,7 +91,7 @@ const handlers = {
     const amount = Number(args[2]);
     // 우선 별 다른 처리는 없습니다.
 
-    // 
+    //
   },
   // event AccountChangeProposed(address indexed account)
   AccountChangeProposed: async (args, log) => {
@@ -133,20 +129,73 @@ const handlers = {
     );
   },
 
-  // event MileageBurned(bytes32 indexed studentId, uint256 amount)
+  // event MileageBurned(bytes32 indexed studentId, address indexed account, address indexed admin, uint256 amount)
   MileageBurned: async (args, log) => {
-    // 토큰 히스토리의 is_activate를 1로 변경
+    const studentHash = args[0];
+    const studentAddress = args[1];
+    const adminAddress = args[2];
+    const amount = Number(args[3]);
+
+    //TODO: DB transaction 처리?
+    try {
+      // 학생 정보 조회
+      const student = await getStudentByStudentHash(studentHash);
+      if (!student) {
+        throw new Error("학생 정보를 찾을 수 없습니다.");
+      }
+      const studentId = student.student_id;
+
+      const activeToken = await getActiveTokenInfo();
+      await createTokenHistory({
+        token_contract_address: activeToken.contract_address,
+        token_name: activeToken.sw_mileage_token_name,
+        student_id: studentId,
+        student_address: studentAddress,
+        admin_address: adminAddress,
+        amount: amount,
+        type: "DIRECT_BURN",
+        note: null,
+      });
+    } catch (err) {
+      console.error("[에러] MileageBurned 에러:", err);
+    }
+
     console.log(
       "[확정] STUDENT_MANAGER MileageBurned:",
       args,
       log.transactionHash
     );
   },
-  // event MileageMinted(bytes32 indexed studentId, uint256 amount)
+  // event MileageMinted(bytes32 indexed studentId, address indexed account, address indexed admin, uint256 amount)
   MileageMinted: async (args, log) => {
-    // 토큰 히스토리의 is_activate를 1로 변경
+    const studentHash = args[0];
+    const studentAddress = args[1];
+    const adminAddress = args[2];
+    const amount = Number(args[3]);
+
+    try {
+      const student = await getStudentByStudentHash(studentHash);
+      if (!student) {
+        throw new Error("학생 정보를 찾을 수 없습니다.");
+      }
+      const studentId = student.student_id;
+
+      const activeToken = await getActiveTokenInfo();
+      await createTokenHistory({
+        token_contract_address: activeToken.contract_address,
+        token_name: activeToken.sw_mileage_token_name,
+        student_id: studentId,
+        student_address: studentAddress,
+        admin_address: adminAddress,
+        amount: amount,
+        type: "DIRECT_MINT",
+        note: null,
+      });
+    } catch (err) {
+      console.error("[에러] MileageMinted 에러:", err);
+    }
     console.log(
-      "[확정] STUDENT_MANAGER MileageBurned:",
+      "[확정] STUDENT_MANAGER MILEAGE_MINTED:",
       args,
       log.transactionHash
     );
