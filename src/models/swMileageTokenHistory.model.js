@@ -6,11 +6,11 @@ module.exports = (sequelize, DataTypes) => {
           autoIncrement: true,
       },
       token_contract_address: {
-          type: DataTypes.INTEGER,
+          type: DataTypes.STRING,
           allowNull: false,
       },
       token_name: {
-          type: DataTypes.INTEGER,
+          type: DataTypes.STRING,
           allowNull: true,
       },
       student_id: {

@@ -1,28 +1,27 @@
 const { swMileageToken } = require("../models");
-async function getLatestSwMileageTokenAddress() {
-  const latest = await swMileageToken.findOne({
-    where: { is_confirmed: 1 },
-    order: [["created_at", "DESC"]],
-  });
-  //console.log(latest.dataValues.contract_address);
-  return latest ? latest.dataValues.contract_address : null;
-}
+const { ethers } = require("ethers");
+const contracts = require("../socket/contract");
+const config = { ETH_NODE_WSS: "wss://public-en-kairos.node.kaia.io/ws" };
 
-async function updateTokenStatus(contractAddress,status,block, txHash) {
+async function getActiveTokenInfo() {
   try {
-    await swMileageToken.update(
-      { is_confirmed: status, last_block: block },
-      { where: { contract_address: contractAddress, transaction_hash: txHash } }
+    //TODO: 코드 중복
+    let provider = new ethers.WebSocketProvider(config.ETH_NODE_WSS);
+    const contract = new ethers.Contract(
+      contracts[0].address,
+      contracts[0].abi,
+      provider
     );
-    console.log("updateTokenStatus 성공:", contractAddress, status, txHash);
+    const activeTokenAddress = await contract.mileageToken();
+    const activeToken = await swMileageToken.findOne({
+      where: { contract_address: activeTokenAddress },
+    });
+    return activeToken;
   } catch (err) {
-    console.error("updateTokenStatus 에러:", err);
-    throw err; // 에러를 호출한 쪽으로 던짐
+    console.error("getActiveTokenInfo 에러:", err);
   }
 }
 
-
 module.exports = {
-  getLatestSwMileageTokenAddress,
-  updateTokenStatus,
+  getActiveTokenInfo,
 };

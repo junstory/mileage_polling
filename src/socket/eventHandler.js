@@ -1,12 +1,13 @@
 const { bytes32ToStr } = require("../utils/web3");
-const { confirmStudent } = require("../db/student");
+const { confirmStudent, getStudentByStudentHash } = require("../db/student");
 const { confirmAdmin } = require("../db/admin");
 const {
-  updateDocStatus,
-  updateDocStatusToApproved,
-  updateDocStatusToRejected,
+  confirmDoc,
+  approveDoc,
+  rejectDoc,
 } = require("../db/swMileage");
-const { updateTokenHistoryStatus } = require("../db/swMileageTokenHistory");
+const { createTokenHistory } = require("../db/swMileageTokenHistory");
+const { getActiveTokenInfo } = require("../db/swMileageToken");
 
 const handlers = {
   // event AdminAdded(address indexed account)
@@ -35,21 +36,52 @@ const handlers = {
     );
   },
 
-  // event DocSubmitted(uint256 indexed documentIndex)
+  // event DocSubmitted(uint256 indexed documentIndex, bytes32 indexed studentId, bytes32 docHash);
   DocSubmitted: async (args, log) => {
     const documentIndex = Number(args[0]);
-    const transactionHash = log.transactionHash;
-    await updateDocStatus(documentIndex, 1, transactionHash);
-    console.log("[확정] DocSubmitted:", documentIndex, transactionHash);
+    const docHash = args[2];
+    try {
+      await confirmDoc(documentIndex, docHash);
+    } catch (err) {
+      console.error("[에러] DocSubmitted 에러:", err);
+    }
+    console.log("[확정] DocSubmitted:", documentIndex, docHash);
   },
+
   // event DocApproved(uint256 indexed documentIndex, bytes32 indexed studentId, uint256 amount)
   DocApproved: async (args, log) => {
     const documentIndex = Number(args[0]);
-    const studentId = args[1];
+    const studentHash = args[1];
     const amount = Number(args[2]);
-    console.log("DocApproved:", documentIndex, studentId, amount);
-    await updateDocStatusToApproved(documentIndex, studentId);
-    await updateTokenHistoryStatus(1, log.transactionHash);
+
+    //TODO: DB transaction 처리?
+    try {
+      // 학생 정보 조회
+      const student = await getStudentByStudentHash(studentHash);
+      if (!student) {
+        throw new Error("학생 정보를 찾을 수 없습니다.");
+      }
+      const studentId = student.student_id;
+
+      // student_id, doc_index로 sw_mileage 특정 후 상태값 변경
+      await approveDoc(studentId, documentIndex);
+      
+      // history 생성
+      const activeToken = await getActiveTokenInfo();
+      await createTokenHistory({
+        token_contract_address: activeToken.contract_address,
+        token_name: activeToken.sw_mileage_token_name,
+        student_id: studentId,
+        student_address: student.wallet_address,
+        admin_address: null,
+        amount: amount,
+        type: "DOC_APPROVED",
+        note: null,
+      });
+    } catch (err) {
+      console.error("[에러] DocApproved 에러:", err);
+    }
+
     console.log(
       "[확정] STUDENT_MANAGER DocApproved:",
       args,
@@ -59,18 +91,11 @@ const handlers = {
   // event DocRejected(uint256 indexed documentIndex, bytes32 indexed studentId, bytes32 reasonHash)
   DocRejected: async (args, log) => {
     const documentIndex = Number(args[0]);
-    const studentIdBytes = args[1];
-    const reasonHash = args[2];
+    const studentHash = args[1];
+    const amount = Number(args[2]);
+    // 우선 별 다른 처리는 없습니다.
 
-    const studentId = bytes32ToStr(studentIdBytes);
-    const reason = bytes32ToStr(reasonHash);
-    await updateDocStatusToRejected(documentIndex, studentId, reason);
-
-    console.log(
-      "[확정] STUDENT_MANAGER DocRejected:",
-      args,
-      log.transactionHash
-    );
+    // 
   },
   // event AccountChangeProposed(address indexed account)
   AccountChangeProposed: async (args, log) => {

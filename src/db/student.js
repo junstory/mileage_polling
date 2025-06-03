@@ -14,6 +14,17 @@ async function confirmStudent(studentHash) {
   }
 }
 
+async function getStudentByStudentHash(studentHash) {
+  try {
+    const result = await student.findOne({ where: { student_hash: studentHash } });
+    return result;
+  } catch (err) {
+    console.error('getStudent 에러:', err);
+    throw err;  // 에러를 호출한 쪽으로 던짐
+  }
+}
+
 module.exports = {
     confirmStudent,
+    getStudentByStudentHash,
 };
