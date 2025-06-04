@@ -1,32 +1,99 @@
-const { updateDocStatus } = require("../db/swMileage");
-const { updateStudentStatus } = require("../db/student");
-const { addAdminStatus, removeAdminStatus } = require("../db/admin");
-const { updateTokenStatus } = require("../db/swMileageToken");
-const { updateTokenHistoryStatus } = require("../db/swMileageTokenHistory");
+const { bytes32ToStr } = require("../utils/web3");
+const { confirmStudent, getStudentByStudentHash } = require("../db/student");
+const { confirmAdmin } = require("../db/admin");
+const { confirmDoc, approveDoc, rejectDoc } = require("../db/swMileage");
+const { createTokenHistory } = require("../db/swMileageTokenHistory");
+const { getActiveTokenInfo } = require("../db/swMileageToken");
 const {updateWalletHistory} = require("../db/walletHistory");
 const handlers = {
+  // event AdminAdded(address indexed account)
+  AdminAdded: async (args, log) => {
+    const account = args[0];
+    try {
+      await confirmAdmin(account);
+      console.log("[확정] AdminAdded:", args, log.transactionHash);
+    } catch (err) {
+      console.error("[확정] AdminAdded 에러:", err);
+    }
+  },
+
+  // event StudentRegistered(bytes32 indexed studentId, address indexed account)
+  StudentRegistered: async (args, log) => {
+    const studentHash = args[0];
+    try {
+      await confirmStudent(studentHash);
+    } catch (err) {
+      console.error("[에러] StudentRegistered 에러:", err);
+    }
+    console.log(
+      "[확정] STUDENT_MANAGER StudentRegistered:",
+      args,
+      log.transactionHash
+    );
+  },
+
+  // event DocSubmitted(uint256 indexed documentIndex, bytes32 indexed studentId, bytes32 docHash);
   DocSubmitted: async (args, log) => {
     const documentIndex = Number(args[0]);
-    console.log("DocSubmitted:", documentIndex, updateDocStatus);
-    await updateDocStatus(documentIndex, 1, log.transactionHash);
-    console.log("[확정] DocSubmitted:", documentIndex, log.transactionHash);
+    const docHash = args[2];
+    try {
+      await confirmDoc(documentIndex, docHash);
+    } catch (err) {
+      console.error("[에러] DocSubmitted 에러:", err);
+    }
+    console.log("[확정] DocSubmitted:", documentIndex, docHash);
   },
+
+  // event DocApproved(uint256 indexed documentIndex, bytes32 indexed studentId, uint256 amount)
   DocApproved: async (args, log) => {
-    await updateTokenHistoryStatus(1, log.transactionHash);
+    const documentIndex = Number(args[0]);
+    const studentHash = args[1];
+    const amount = Number(args[2]);
+
+    //TODO: DB transaction 처리?
+    try {
+      // 학생 정보 조회
+      const student = await getStudentByStudentHash(studentHash);
+      if (!student) {
+        throw new Error("학생 정보를 찾을 수 없습니다.");
+      }
+      const studentId = student.student_id;
+
+      // student_id, doc_index로 sw_mileage 특정 후 상태값 변경
+      await approveDoc(studentId, documentIndex);
+
+      // history 생성
+      const activeToken = await getActiveTokenInfo();
+      await createTokenHistory({
+        token_contract_address: activeToken.contract_address,
+        token_name: activeToken.sw_mileage_token_name,
+        student_id: studentId,
+        student_address: student.wallet_address,
+        admin_address: null,
+        amount: amount,
+        type: "DOC_APPROVED",
+        note: null,
+      });
+    } catch (err) {
+      console.error("[에러] DocApproved 에러:", err);
+    }
+
     console.log(
       "[확정] STUDENT_MANAGER DocApproved:",
       args,
       log.transactionHash
     );
   },
+  // event DocRejected(uint256 indexed documentIndex, bytes32 indexed studentId, bytes32 reasonHash)
   DocRejected: async (args, log) => {
-    await updateTokenHistoryStatus(1, log.transactionHash);
-    console.log(
-      "[확정] STUDENT_MANAGER DocRejected:",
-      args,
-      log.transactionHash
-    );
+    const documentIndex = Number(args[0]);
+    const studentHash = args[1];
+    const amount = Number(args[2]);
+    // 우선 별 다른 처리는 없습니다.
+
+    //
   },
+  // event AccountChangeProposed(address indexed account)
   AccountChangeProposed: async (args, log) => {
     console.log(
       "[확정] STUDENT_MANAGER AccountChangeProposed:",
@@ -34,6 +101,7 @@ const handlers = {
       log.transactionHash
     );
   },
+  // event AccountChangeConfirmed(address indexed account)
   AccountChangeConfirmed: async (args, log) => {
     // 변경 요청 상태 1 로 바꾸기
     console.log(
@@ -42,6 +110,7 @@ const handlers = {
       log.transactionHash
     );
   },
+  // event AccountChanged(address indexed account)
   AccountChanged: async (args, log) => {
     // 학생 회원가입 is_active를 다시 사용할지??아니면 새로 status를 만들어서 관리할지
     await updateWalletHistory(args[0], args[1]);
@@ -51,7 +120,8 @@ const handlers = {
       log.transactionHash
     );
   },
-   StudentRecordUpdated: async (args, log) => {
+  // event StudentRecordUpdated(bytes32 indexed studentId, address indexed account)
+  StudentRecordUpdated: async (args, log) => {
     //관리자가 계정 강제 변경
     console.log(
       "[확정] STUDENT_MANAGER StudentRecordUpdated:",
@@ -59,104 +129,77 @@ const handlers = {
       log.transactionHash
     );
   },
-  AdminAdded: async (args, log) => {
-    // AdminAdded 이벤트가 두 컨트랙트에 중복됨 ->상관 없을 것 같아서 진행
-    const account = args[0];
-    console.log("[확정] Both..? AdminAdded:", args, log.transactionHash);
-    await addAdminStatus(account, 1, log.transactionHash);
-    console.log("[확정] AdminAdded:", args, log.transactionHash);
-  },
-  AdminRemoved: async (args, log) => {
-    // AdminRemoved 이벤트가 두 컨트랙트에 중복됨
-    const account = args[0];
-    console.log("[확정] Both..? AdminRemoved:", args, log.transactionHash);
-    await removeAdminStatus(account, 0, log.transactionHash);
-    console.log("[확정] AdminRemoved:", args, log.transactionHash);
-  },
+
+  // event MileageBurned(bytes32 indexed studentId, address indexed account, address indexed admin, uint256 amount)
   MileageBurned: async (args, log) => {
-    // 토큰 히스토리의 is_activate를 1로 변경
+    const studentHash = args[0];
+    const studentAddress = args[1];
+    const adminAddress = args[2];
+    const amount = Number(args[3]);
+
+    //TODO: DB transaction 처리?
+    try {
+      // 학생 정보 조회
+      const student = await getStudentByStudentHash(studentHash);
+      if (!student) {
+        throw new Error("학생 정보를 찾을 수 없습니다.");
+      }
+      const studentId = student.student_id;
+
+      const activeToken = await getActiveTokenInfo();
+      await createTokenHistory({
+        token_contract_address: activeToken.contract_address,
+        token_name: activeToken.sw_mileage_token_name,
+        student_id: studentId,
+        student_address: studentAddress,
+        admin_address: adminAddress,
+        amount: amount,
+        type: "DIRECT_BURN",
+        note: null,
+      });
+    } catch (err) {
+      console.error("[에러] MileageBurned 에러:", err);
+    }
+
     console.log(
       "[확정] STUDENT_MANAGER MileageBurned:",
       args,
       log.transactionHash
     );
   },
-  Paused: async (args, log) => {
-    console.log("[확정] STUDENT_MANAGER Paused:", args, log.transactionHash);
-  },
-  Unpaused: async (args, log) => {
-    console.log("[확정] STUDENT_MANAGER Unpaused:", args, log.transactionHash);
-  },
-  StudentRegistered: async (args, log) => {
-    const studentId = args[0];
-    const account = args[1];
-    console.log(
-      "[확정] STUDENT_MANAGER StudentRegistered:",
-      args,
-      log.transactionHash
-    );
-    await updateStudentStatus(account, 1, log.transactionHash);
-  },
-  Initialized: async (args, log) => {
-    // Initialized 이벤트가 두 컨트랙트에 중복됨
-    console.log("[확정] Initialized:", args, log.transactionHash);
-  },
-  transferMileageToken: async (args, log) => {
-    console.log(
-      "[확정] STUDENT_MANAGER transferMileageToken:",
-      args,
-      log.transactionHash
-    );
-  },
+  // event MileageMinted(bytes32 indexed studentId, address indexed account, address indexed admin, uint256 amount)
+  MileageMinted: async (args, log) => {
+    const studentHash = args[0];
+    const studentAddress = args[1];
+    const adminAddress = args[2];
+    const amount = Number(args[3]);
 
-  // SW_MILEAGE_CONTRACT_ADDRESS_EVENT
-  UpdateElement: async (args, log) => {
-    console.log("[확정] SW_MILEAGE UpdateElement:", args, log.transactionHash);
-  },
-  RemoveElement: async (args, log) => {
-    console.log("[확정] SW_MILEAGE RemoveElement:", args, log.transactionHash);
-  },
-  Approval: async (args, log) => {
-    console.log("[확정] SW_MILEAGE Approval:", args, log.transactionHash);
-  },
-  Transfer: async (args, log) => {
-    console.log("[확정] SW_MILEAGE Transfer:", args, log.transactionHash);
-  },
-  AddAdministrator: async (args, log) => {
-    console.log(
-      "[확정] SW_MILEAGE AddAdministrator:",
-      args,
-      log.transactionHash
-    );
-  },
-  RemoveAdministrator: async (args, log) => {
-    console.log(
-      "[확정] SW_MILEAGE RemoveAdministrator:",
-      args,
-      log.transactionHash
-    );
-  },
+    try {
+      const student = await getStudentByStudentHash(studentHash);
+      if (!student) {
+        throw new Error("학생 정보를 찾을 수 없습니다.");
+      }
+      const studentId = student.student_id;
 
-  MileageTokenCreated: async (args, log) => {
-    console.log(
-      "[확정] SW_MILEAGE_FACTORY MileageTokenCreated:",
-      args,
-      log.transactionHash
-    );
-
-    const tokenAddress = args.tokenAddress || args[0];
-    const blockNumber = log.blockNumber;
-    console.log(
-      "[팩토리] MileageTokenCreated:",
-      tokenAddress,
-      log.transactionHash,
-      blockNumber
-    );
-
-    await updateTokenStatus(tokenAddress, 1,blockNumber, log.transactionHash);
-    if (typeof global.onNewMileageTokenCreated === "function") {
-      await global.onNewMileageTokenCreated(tokenAddress);
+      const activeToken = await getActiveTokenInfo();
+      await createTokenHistory({
+        token_contract_address: activeToken.contract_address,
+        token_name: activeToken.sw_mileage_token_name,
+        student_id: studentId,
+        student_address: studentAddress,
+        admin_address: adminAddress,
+        amount: amount,
+        type: "DIRECT_MINT",
+        note: null,
+      });
+    } catch (err) {
+      console.error("[에러] MileageMinted 에러:", err);
     }
+    console.log(
+      "[확정] STUDENT_MANAGER MILEAGE_MINTED:",
+      args,
+      log.transactionHash
+    );
   },
 };
 

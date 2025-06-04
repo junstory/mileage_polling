@@ -190,11 +190,11 @@ function partition(arr, predicate) {
 }
 
 setInterval(async () => {
-  const contractAddress = await getLatestSwMileageTokenAddress();
-  if (!contractAddress) {
-    console.log("[경고] SW 마일리지 토큰이 DB에 등록되어 있지 않습니다.");
-    throw new Error("SW 마일리지 토큰이 등록되지 않았습니다.");
-  }
+  // const contractAddress = await getLatestSwMileageTokenAddress();
+  // if (!contractAddress) {
+  //   console.log("[경고] SW 마일리지 토큰이 DB에 등록되어 있지 않습니다.");
+  //   throw new Error("SW 마일리지 토큰이 등록되지 않았습니다.");
+  // }
   const confirmBlock = latestBlock - 3;
   let lastBlock = await getLastProcessedBlockLegacy();
   console.log("확정 블록 확인", { confirmBlock, lastBlock });
