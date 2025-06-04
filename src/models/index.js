@@ -27,6 +27,7 @@ const student = require('./student.model')(sequelize, Sequelize.DataTypes);
 const admin = require('./admin.model')(sequelize, Sequelize.DataTypes);
 const swMileageToken = require('./swMileageToken.model')(sequelize, Sequelize.DataTypes);
 const swMileageTokenHistory = require('./swMileageTokenHistory.model')(sequelize, Sequelize.DataTypes);
+const walletHistory = require('./walletHistory.model')(sequelize, Sequelize.DataTypes);
 
 module.exports = {
     sequelize,
@@ -36,5 +37,6 @@ module.exports = {
     student,
     admin,
     swMileageToken,
-    swMileageTokenHistory
+    swMileageTokenHistory,
+    walletHistory
 }

@@ -3,7 +3,7 @@ const { updateStudentStatus } = require("../db/student");
 const { addAdminStatus, removeAdminStatus } = require("../db/admin");
 const { updateTokenStatus } = require("../db/swMileageToken");
 const { updateTokenHistoryStatus } = require("../db/swMileageTokenHistory");
-
+const {updateWalletHistory} = require("../db/walletHistory");
 const handlers = {
   DocSubmitted: async (args, log) => {
     const documentIndex = Number(args[0]);
@@ -44,6 +44,7 @@ const handlers = {
   },
   AccountChanged: async (args, log) => {
     // 학생 회원가입 is_active를 다시 사용할지??아니면 새로 status를 만들어서 관리할지
+    await updateWalletHistory(args[0], args[1]);
     console.log(
       "[확정] STUDENT_MANAGER AccountChanged:",
       args,
