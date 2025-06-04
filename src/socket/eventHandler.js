@@ -113,7 +113,15 @@ const handlers = {
   // event AccountChanged(address indexed account)
   AccountChanged: async (args, log) => {
     // 학생 회원가입 is_active를 다시 사용할지??아니면 새로 status를 만들어서 관리할지
-    await updateWalletHistory(args[0], args[1]);
+    try{
+      studentId = args[0];
+      address = args[1]
+      targetAddress = args[2];
+      await updateWalletHistory(address, targetAddress,1);
+    } catch(err){
+      console.error("[에러] AccountChanged 에러:", err);
+    }
+
     console.log(
       "[확정] STUDENT_MANAGER AccountChanged:",
       args,
