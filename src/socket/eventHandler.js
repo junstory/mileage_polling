@@ -154,6 +154,7 @@ const handlers = {
         admin_address: adminAddress,
         amount: amount,
         type: "DIRECT_BURN",
+        transaction_hash: log.transactionHash,
         note: null,
       });
     } catch (err) {
@@ -189,6 +190,7 @@ const handlers = {
         admin_address: adminAddress,
         amount: amount,
         type: "DIRECT_MINT",
+        transaction_hash: log.transactionHash,
         note: null,
       });
     } catch (err) {

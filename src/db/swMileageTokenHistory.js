@@ -21,7 +21,8 @@ async function createTokenHistory({
   admin_address,
   amount,
   type,
-  note
+  note,
+  transaction_hash,
 }) {
   try {
     await swMileageTokenHistory.create({
@@ -33,6 +34,7 @@ async function createTokenHistory({
       amount,
       type,
       note,
+      transaction_hash,
     });
     console.log('createTokenHistory 성공:');
   } catch (err) {
