@@ -6,8 +6,8 @@ const bytes32ToStr = (bytes32) => {
     return bytesToString(fromHex(bytes32, {size: 32}));
 }
 
-console.log(bytes32ToStr("0xec9588eb8595ed9598ec84b8ec9a94")) // 안녕하세요
-console.log(bytes32ToStr("0x3230313831303232333100000000000000000000000000000000000000000000")) // 2018102231
+//console.log(bytes32ToStr("0xec9588eb8595ed9598ec84b8ec9a94")) // 안녕하세요
+//console.log(bytes32ToStr("0x3230313831303232333100000000000000000000000000000000000000000000")) // 2018102231
 
 module.exports = {
     web3,
