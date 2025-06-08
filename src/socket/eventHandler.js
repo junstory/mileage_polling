@@ -1,10 +1,23 @@
-const { bytes32ToStr } = require("../utils/web3");
-const { confirmStudent, getStudentByStudentHash } = require("../db/student");
+const {
+  confirmStudent,
+  getStudentByStudentHash,
+  updateStudentAddress,
+} = require("../db/student");
 const { confirmAdmin } = require("../db/admin");
 const { confirmDoc, approveDoc, rejectDoc } = require("../db/swMileage");
 const { createTokenHistory } = require("../db/swMileageTokenHistory");
 const { getActiveTokenInfo } = require("../db/swMileageToken");
-const {updateWalletHistory} = require("../db/walletHistory");
+const {
+  getWalletHistoryByStudentHash,
+  confirmWalletLost,
+} = require("../db/walletHistory");
+const SW_MILEAGE_CONTRACT_ADDRESS_ABI = require("../utils/data/contract/SwMileageToken.abi.json");
+
+const { ethers } = require("ethers");
+const config = { ETH_NODE_WSS: "wss://public-en-kairos.node.kaia.io/ws" };
+const contracts = require("./contract");
+let provider = new ethers.WebSocketProvider(config.ETH_NODE_WSS);
+
 const handlers = {
   // event AdminAdded(address indexed account)
   AdminAdded: async (args, log) => {
@@ -72,6 +85,7 @@ const handlers = {
         admin_address: null,
         amount: amount,
         type: "DOC_APPROVED",
+        transaction_hash: log.transactionHash,
         note: null,
       });
     } catch (err) {
@@ -101,32 +115,113 @@ const handlers = {
       log.transactionHash
     );
   },
-  // event AccountChangeConfirmed(address indexed account)
+  // event AccountChangeConfirmed(bytes32 indexed studentId, address indexed account, address indexed targetAccount)
   AccountChangeConfirmed: async (args, log) => {
     // 변경 요청 상태 1 로 바꾸기
+    const studentHash = args[0];
+    const previousAccount = args[1];
+    const targetAccount = args[2];
+
+    try {
+      const student = await getStudentByStudentHash(studentHash);
+      if (!student) {
+        throw new Error("학생 정보를 찾을 수 없습니다.");
+      }
+      await updateStudentAddress(studentHash, previousAccount, targetAccount);
+
+      const studentId = student.student_id;
+      // history 생성
+      const activeToken = await getActiveTokenInfo();
+      const studentManager = new ethers.Contract(
+        contracts[0].address,
+        contracts[0].abi,
+        provider
+      );
+
+      const mileageTokenAddress = await studentManager.mileageToken();
+
+      const mileageContract = new ethers.Contract(
+        mileageTokenAddress,
+        SW_MILEAGE_CONTRACT_ADDRESS_ABI,
+        provider
+      );
+
+      const amount = await mileageContract.balanceOf(targetAccount);
+      console.log(amount);
+      const result = await createTokenHistory({
+        token_contract_address: activeToken.contract_address,
+        token_name: activeToken.sw_mileage_token_name,
+        student_id: studentId,
+        student_address: student.wallet_address,
+        admin_address: null,
+        amount: amount,
+        transaction_hash: log.transactionHash,
+        type: "ACCOUNT_CHANGE",
+        note: `${previousAccount} → ${targetAccount}`,
+      });
+    } catch (err) {
+      console.log("[에러] AccountChangeConfirmed 에러:", err);
+    }
     console.log(
       "[확정] STUDENT_MANAGER AccountChangeConfirmed:",
       args,
       log.transactionHash
     );
   },
-  // event AccountChanged(address indexed account)
+  // event AccountChanged(bytes32 indexed studentId, address indexed account, address indexed targetAccount);
   AccountChanged: async (args, log) => {
-    // 학생 회원가입 is_active를 다시 사용할지??아니면 새로 status를 만들어서 관리할지
-    try{
-      studentId = args[0];
-      address = args[1]
-      targetAddress = args[2];
-      await updateWalletHistory(address, targetAddress,1);
-    } catch(err){
-      console.error("[에러] AccountChanged 에러:", err);
-    }
+    const studentHash = args[0];
+    const previousAccount = args[1];
+    const targetAccount = args[2];
+    console.log(args);
+    try {
+      const walletLost = await getWalletHistoryByStudentHash(studentHash);
+      if (!walletLost) {
+        console.log("처리할 Wallet Lost 존재하지 않음");
+        return;
+      }
+      await confirmWalletLost(walletLost.wallet_history_id);
+      await updateStudentAddress(studentHash, previousAccount, targetAccount);
 
-    console.log(
-      "[확정] STUDENT_MANAGER AccountChanged:",
-      args,
-      log.transactionHash
-    );
+      const student = await getStudentByStudentHash(studentHash);
+      if (!student) {
+        throw new Error("학생 정보를 찾을 수 없습니다.");
+      }
+      const studentId = student.student_id;
+
+      // history 생성
+      const activeToken = await getActiveTokenInfo();
+      const studentManager = new ethers.Contract(
+        contracts[0].address,
+        contracts[0].abi,
+        provider
+      );
+
+      const mileageTokenAddress = await studentManager.mileageToken();
+
+      const mileageContract = new ethers.Contract(
+        mileageTokenAddress,
+        SW_MILEAGE_CONTRACT_ADDRESS_ABI,
+        provider
+      );
+
+      const amount = await mileageContract.balanceOf(targetAccount);
+      console.log(amount);
+      const result = await createTokenHistory({
+        token_contract_address: activeToken.contract_address,
+        token_name: activeToken.sw_mileage_token_name,
+        student_id: studentId,
+        student_address: student.wallet_address,
+        admin_address: null,
+        amount: amount,
+        transaction_hash: log.transactionHash,
+        type: "ACCOUNT_CHANGE",
+        note: `${previousAccount} → ${targetAccount}`,
+      });
+      console.log(result);
+    } catch (err) {
+      console.log("[에러] AccountChanged 에러:", err);
+    }
   },
   // event StudentRecordUpdated(bytes32 indexed studentId, address indexed account)
   StudentRecordUpdated: async (args, log) => {

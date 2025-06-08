@@ -25,7 +25,7 @@ async function createTokenHistory({
   transaction_hash,
 }) {
   try {
-    await swMileageTokenHistory.create({
+    return await swMileageTokenHistory.create({
       token_contract_address,
       token_name,
       student_id,
@@ -36,7 +36,6 @@ async function createTokenHistory({
       note,
       transaction_hash,
     });
-    console.log('createTokenHistory 성공:');
   } catch (err) {
     console.error('createTokenHistory 에러:', err);
     throw err;  // 에러를 호출한 쪽으로 던짐
