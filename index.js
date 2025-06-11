@@ -2,7 +2,6 @@
 const startSocketConnection = require('./src/socket/index.contracts');
 const { sequelize } = require('./src/models');
 const {createSchema} = require('./src/config/db');
-
 // async function startPolling() {
 //     console.log("Starting polling...");
 //     console.log("Starting polling...");
@@ -24,10 +23,13 @@ const {createSchema} = require('./src/config/db');
 
 (async () => {
     try {
+        await new Promise(resolve => setTimeout(resolve, 5000));
         await createSchema();
         await sequelize.sync({alter:true});
         
         console.log("DB schema created successfully.");
+
+        startSocketConnection();
     } catch (error) {
         console.error("Error creating DB schema:", error);
     }
@@ -35,6 +37,6 @@ const {createSchema} = require('./src/config/db');
 
 
 //startPolling();
-startSocketConnection();
+
 
 
