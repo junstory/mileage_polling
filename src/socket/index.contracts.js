@@ -189,6 +189,25 @@ function partition(arr, predicate) {
   return [yes, no];
 }
 
+const rpcUrls = [
+  "https://public-en-kairos.node.kaia.io",
+  "https://responsive-green-emerald.kaia-kairos.quiknode.pro/",
+  "https://kaia-kairos.blockpi.network/v1/rpc/public",
+];
+const providers = rpcUrls.map(url => new ethers.JsonRpcProvider(url));
+
+async function getLogsWithFallback(params) {
+  for (let p of providers) {
+    try {
+      return await p.getLogs(params);
+    } catch (err) {
+      logger.warn("[getLogs] provider 실패, 다음 후보 시도:", err.message);
+    }
+  }
+  logger.error("[getLogs] 모든 provider 실패, 블록:", params.fromBlock, params.toBlock);
+  return []; // 또는 throw new Error(...) 할 수도
+}
+
 setInterval(async () => {
   // const contractAddress = await getLatestSwMileageTokenAddress();
   // if (!contractAddress) {
@@ -200,11 +219,17 @@ setInterval(async () => {
   console.log("확정 블록 확인", { confirmBlock, lastBlock });
   for (let b = lastBlock + 1; b <= confirmBlock; b++) {
     for (const contractMeta of contracts) {
-      const logs = await provider.getLogs({
+      // const logs = await provider.getLogs({
+      //   fromBlock: b,
+      //   toBlock: b,
+      //   address: contractMeta.address,
+      // });
+      const logs = await getLogsWithFallback({
         fromBlock: b,
         toBlock: b,
         address: contractMeta.address,
       });
+
       const iface = new ethers.Interface(contractMeta.abi);
       for (const log of logs) {
         try {
