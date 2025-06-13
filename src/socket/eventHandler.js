@@ -129,36 +129,36 @@ const handlers = {
       }
       await updateStudentAddress(studentHash, previousAccount, targetAccount);
 
-      const studentId = student.student_id;
-      // history 생성
-      const activeToken = await getActiveTokenInfo();
-      const studentManager = new ethers.Contract(
-        contracts[0].address,
-        contracts[0].abi,
-        provider
-      );
+      // const studentId = student.student_id;
+      // // history 생성
+      // const activeToken = await getActiveTokenInfo();
+      // const studentManager = new ethers.Contract(
+      //   contracts[0].address,
+      //   contracts[0].abi,
+      //   provider
+      // );
 
-      const mileageTokenAddress = await studentManager.mileageToken();
+      // const mileageTokenAddress = await studentManager.mileageToken();
 
-      const mileageContract = new ethers.Contract(
-        mileageTokenAddress,
-        SW_MILEAGE_CONTRACT_ADDRESS_ABI,
-        provider
-      );
+      // const mileageContract = new ethers.Contract(
+      //   mileageTokenAddress,
+      //   SW_MILEAGE_CONTRACT_ADDRESS_ABI,
+      //   provider
+      // );
 
-      const amount = await mileageContract.balanceOf(targetAccount);
-      console.log(amount);
-      const result = await createTokenHistory({
-        token_contract_address: activeToken.contract_address,
-        token_name: activeToken.sw_mileage_token_name,
-        student_id: studentId,
-        student_address: student.wallet_address,
-        admin_address: null,
-        amount: amount,
-        transaction_hash: log.transactionHash,
-        type: "ACCOUNT_CHANGE",
-        note: `${previousAccount} → ${targetAccount}`,
-      });
+      // const amount = await mileageContract.balanceOf(targetAccount);
+      // console.log(amount);
+      // const result = await createTokenHistory({
+      //   token_contract_address: activeToken.contract_address,
+      //   token_name: activeToken.sw_mileage_token_name,
+      //   student_id: studentId,
+      //   student_address: student.wallet_address,
+      //   admin_address: null,
+      //   amount: amount,
+      //   transaction_hash: log.transactionHash,
+      //   type: "ACCOUNT_CHANGE",
+      //   note: `${previousAccount} → ${targetAccount}`,
+      // });
     } catch (err) {
       console.log("[에러] AccountChangeConfirmed 에러:", err);
     }
@@ -187,38 +187,38 @@ const handlers = {
       if (!student) {
         throw new Error("학생 정보를 찾을 수 없습니다.");
       }
-      const studentId = student.student_id;
+      // const studentId = student.student_id;
 
-      // history 생성
-      const activeToken = await getActiveTokenInfo();
-      const studentManager = new ethers.Contract(
-        contracts[0].address,
-        contracts[0].abi,
-        provider
-      );
+      // // history 생성
+      // const activeToken = await getActiveTokenInfo();
+      // const studentManager = new ethers.Contract(
+      //   contracts[0].address,
+      //   contracts[0].abi,
+      //   provider
+      // );
 
-      const mileageTokenAddress = await studentManager.mileageToken();
+      // const mileageTokenAddress = await studentManager.mileageToken();
 
-      const mileageContract = new ethers.Contract(
-        mileageTokenAddress,
-        SW_MILEAGE_CONTRACT_ADDRESS_ABI,
-        provider
-      );
+      // const mileageContract = new ethers.Contract(
+      //   mileageTokenAddress,
+      //   SW_MILEAGE_CONTRACT_ADDRESS_ABI,
+      //   provider
+      // );
 
-      const amount = await mileageContract.balanceOf(targetAccount);
-      console.log(amount);
-      const result = await createTokenHistory({
-        token_contract_address: activeToken.contract_address,
-        token_name: activeToken.sw_mileage_token_name,
-        student_id: studentId,
-        student_address: student.wallet_address,
-        admin_address: null,
-        amount: amount,
-        transaction_hash: log.transactionHash,
-        type: "ACCOUNT_CHANGE",
-        note: `${previousAccount} → ${targetAccount}`,
-      });
-      console.log(result);
+      // const amount = await mileageContract.balanceOf(targetAccount);
+      // console.log(amount);
+      // const result = await createTokenHistory({
+      //   token_contract_address: activeToken.contract_address,
+      //   token_name: activeToken.sw_mileage_token_name,
+      //   student_id: studentId,
+      //   student_address: student.wallet_address,
+      //   admin_address: null,
+      //   amount: amount,
+      //   transaction_hash: log.transactionHash,
+      //   type: "ACCOUNT_CHANGE",
+      //   note: `${previousAccount} → ${targetAccount}`,
+      // });
+      // console.log(result);
     } catch (err) {
       console.log("[에러] AccountChanged 에러:", err);
     }
